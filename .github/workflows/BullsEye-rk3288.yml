@@ -1,0 +1,144 @@
+#
+# Copyright (c) 2023 TheCupangin
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/thecupanging/tismart-rk3288
+# Description: Repack Bullseye using GitHub Actions
+#
+
+name: Repack Tismart-RK3288A Bullseye
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+
+env:
+  BOOT_URL: https://github.com/thecupangin/tismart-rk3288
+  BOOT_BRANCH: main
+  ROOTFS_URL: http://dl.sd-card-images.johang.se/debians/2023-01-09/debian-bullseye-armhf-wohh9i.bin.gz
+
+  DIY_P1_SH: opiz-part1.sh
+  DIY_P2_SH: opiz-part2.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Jakarta
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "Asia/Jakarta"
+	    sudo mkdir -p /rk3288
+        sudo chown $USER:$GROUPS /rk3288
+
+    - name: Clone BOOT & ROOTFS
+      working-directory: /rk3288
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL -b $REPO_BRANCH
+		unzip rk3288.zip
+		wget $ROOTFS_URL
+		gunzip debian-bullseye-armhf-wohh9i.bin.gz
+
+    - name: Creating GPT disk partitions
+      run: |
+	    echo "Creating GPT disk partitions"
+		
+		parted --script /dev/mmcblk0 \
+			mklabel GPT \
+			mkpart skip 0 16M 2>/dev/null \
+			set 1 hidden on \
+			mkpart BOOT fat32 16M 129M 2>/dev/null \
+			mkpart ROOTFS ext4 129M 3072M 2>/dev/null \
+
+		parted --script /dev/mmcblk0 \
+			unit s 
+			p
+
+		sleep 2
+
+    - name: Repack the Images
+      run: |
+		dd if=idbloader.img of=/dev/mmcblk0 seek=64
+		dd if=uboot.img of=/dev/mmcblk0 seek=16384
+		dd if=boot.img of=/dev/mmcblk0p2
+		dd if=rootfs.img of=/dev/mmcblk0p3
+
+		sync
+		echo "DONE..."
+
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+    - name: Organize files
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd rk3288
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "::set-output name=status::success"
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@main
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: Bullseye_rk3288${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Generate release tag
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "::set-output name=release_tag::$(date +"%Y.%m.%d-%H%M")"
+        touch release.txt
+        echo "::set-output name=status::success"
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@v1
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: Bullseye-${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
+
+    - name: Delete workflow runs
+      uses: GitRML/delete-workflow-runs@main
+      with:
+        retain_days: 1
+        keep_minimum_runs: 3
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@v0.1.0
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest: 3
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
