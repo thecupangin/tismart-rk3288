@@ -20,13 +20,9 @@ on:
         default: 'false'
 
 env:
-  BOOT_URL: https://github.com/thecupangin/tismart-rk3288
-  BOOT_BRANCH: main
+  BOOT_URL: https://download1322.mediafire.com/q2bgljt747yg/2cjwzdn0az4nug6/rk3288.zip
   ROOTFS_URL: http://dl.sd-card-images.johang.se/debians/2023-01-09/debian-bullseye-armhf-wohh9i.bin.gz
 
-  DIY_P1_SH: opiz-part1.sh
-  DIY_P2_SH: opiz-part2.sh
-  UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Jakarta
@@ -56,7 +52,7 @@ jobs:
       working-directory: /rk3288
       run: |
         df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH
+        wget -O https://download1322.mediafire.com/q2bgljt747yg/2cjwzdn0az4nug6/rk3288.zip
 		unzip rk3288.zip
 		wget $ROOTFS_URL
 		gunzip debian-bullseye-armhf-wohh9i.bin.gz
