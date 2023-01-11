@@ -51,37 +51,37 @@ jobs:
       working-directory: /rk3288
       run: |
         df -hT $PWD
-        wget -O https://download1322.mediafire.com/q2bgljt747yg/2cjwzdn0az4nug6/rk3288.zip
-		unzip rk3288.zip
-		wget $ROOTFS_URL
-		gunzip debian-bullseye-armhf-wohh9i.bin.gz
+        wget $BOOT_URL
+	unzip rk3288.zip
+	wget $ROOTFS_URL
+	gunzip debian-bullseye-armhf-wohh9i.bin.gz
 
     - name: Creating GPT disk partitions
       run: |
-	    echo "Creating GPT disk partitions"
+      	echo "Creating GPT disk partitions"
 		
-		parted --script /dev/mmcblk0 \
-			mklabel GPT \
-			mkpart skip 0 16M 2>/dev/null \
-			set 1 hidden on \
-			mkpart BOOT fat32 16M 129M 2>/dev/null \
-			mkpart ROOTFS ext4 129M 3072M 2>/dev/null \
+	parted --script /dev/mmcblk0 \
+		mklabel GPT \
+		mkpart skip 0 16M 2>/dev/null \
+		set 1 hidden on \
+		mkpart BOOT fat32 16M 129M 2>/dev/null \
+		mkpart ROOTFS ext4 129M 3072M 2>/dev/null \
 
-		parted --script /dev/mmcblk0 \
-			unit s 
-			p
+	parted --script /dev/mmcblk0 \
+		unit s 
+		p
 
-		sleep 2
+	sleep 2
 
     - name: Repack the Images
       run: |
-		dd if=idbloader.img of=/dev/mmcblk0 seek=64
-		dd if=uboot.img of=/dev/mmcblk0 seek=16384
-		dd if=boot.img of=/dev/mmcblk0p2
-		dd if=rootfs.img of=/dev/mmcblk0p3
+	dd if=idbloader.img of=/dev/mmcblk0 seek=64
+	dd if=uboot.img of=/dev/mmcblk0 seek=16384
+	dd if=boot.img of=/dev/mmcblk0p2
+	dd if=rootfs.img of=/dev/mmcblk0p3
 
-		sync
-		echo "DONE..."
+	sync
+	echo "DONE..."
 
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
